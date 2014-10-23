@@ -9,7 +9,7 @@ import os.path
 import mmap
 from datetime import date
 import time
-import warnings
+from warnings import warn
 
 from six import text_type
 from construct import adapters, Array, Byte, Bytes, Const, Struct, UBInt32, \
@@ -23,37 +23,18 @@ from .tpsrecord import TpsRecordsList
 
 
 
-
-
-
-# TPS file header
-header = Struct('header',
-                ULInt32('offset'),
-                ULInt16('size'),
-                ULInt32('file_size'),
-                ULInt32('allocated_file_size'),
-                Const(Bytes('top_speed_mark', 6), b'tOpS\x00\x00'),
-                UBInt32('last_issued_row'),
-                ULInt32('change_count'),
-                ULInt32('page_root_ref'),
-                Array(lambda ctx: (ctx['size'] - 0x20) / 2 / 4, ULInt32('block_start_ref')),
-                Array(lambda ctx: (ctx['size'] - 0x20) / 2 / 4, ULInt32('block_end_ref')),
-)
-
 # Date structure
 date_struct = Struct('date_struct',
                      Byte('day'),
                      Byte('month'),
-                     ULInt16('year'),
-)
+                     ULInt16('year'), )
 
 # Time structure
 time_struct = Struct('time_struct',
                      Byte('centisecond'),
                      Byte('second'),
                      Byte('minute'),
-                     Byte('hour')
-)
+                     Byte('hour'))
 
 
 class TPS:
@@ -84,7 +65,7 @@ class TPS:
         if check:
             if self.file_size & 0x3F != 0:
                 # TODO check translate
-                warnings.warn('File size is not a multiple of 64 bytes.', RuntimeWarning)
+                warn('File size is not a multiple of 64 bytes.', RuntimeWarning)
 
         with open(self.filename, mode='r+b') as tpsfile:
             self.tps_file = mmap.mmap(tpsfile.fileno(), 0)
@@ -92,10 +73,23 @@ class TPS:
             self.decryptor = decryptor_class(self.tps_file, self.password)
 
             try:
-                self.header = header.parse(self.__read(0x200))
+                # TPS file header
+                header = Struct('header',
+                                ULInt32('offset'),
+                                ULInt16('size'),
+                                ULInt32('file_size'),
+                                ULInt32('allocated_file_size'),
+                                Const(Bytes('top_speed_mark', 6), b'tOpS\x00\x00'),
+                                UBInt32('last_issued_row'),
+                                ULInt32('change_count'),
+                                ULInt32('page_root_ref'),
+                                Array(lambda ctx: (ctx['size'] - 0x20) / 2 / 4, ULInt32('block_start_ref')),
+                                Array(lambda ctx: (ctx['size'] - 0x20) / 2 / 4, ULInt32('block_end_ref')), )
+
+                self.header = header.parse(self.read(0x200))
                 self.pages = TpsPagesList(self, self.header.page_root_ref, check=self.check)
-                self.__getdefinition()
-                self.set_current_table(current_tablename)
+                # self.__getdefinition()
+                # self.set_current_table(current_tablename)
             except adapters.ConstError:
                 print('Bad cryptographic keys.')
 
@@ -114,9 +108,15 @@ class TPS:
             if self.tables.iscomplete():
                 break
 
-    def __read(self, size, pos=None):
+    def block_contains(self, start_ref, end_ref):
+        for i in range(len(self.header.block_start_ref)):
+            if self.header.block_start_ref[i] <= start_ref and end_ref <= self.header.block_end_ref[i]:
+                return True
+        return False
+
+    def read(self, size, pos=None):
         if pos is not None:
-            self.__seek(pos)
+            self.seek(pos)
         else:
             pos = self.tps_file.tell()
         if self.decryptor.is_encrypted():
@@ -124,7 +124,7 @@ class TPS:
         else:
             return self.tps_file.read(size)
 
-    def __seek(self, pos):
+    def seek(self, pos):
         self.tps_file.seek(pos)
 
     def __iter__(self):
