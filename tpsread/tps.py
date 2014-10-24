@@ -10,15 +10,17 @@ import mmap
 from datetime import date
 import time
 from warnings import warn
+from binascii import hexlify
 
 from six import text_type
-from construct import adapters, Array, Byte, Bytes, Const, Struct, UBInt32, \
-    ULInt16, ULInt32
+from construct import adapters, Array, Byte, Bytes, Const, LFloat32, LFloat64, Struct, SLInt16, SLInt32, UBInt32, \
+    ULInt8, ULInt16, ULInt32
 
 from .tpscrypt import TpsDecryptor
 from .tpstable import TpsTablesList
 from .tpspage import TpsPagesList
 from .tpsrecord import TpsRecordsList
+from .utils import check_value
 
 
 
@@ -89,24 +91,27 @@ class TPS:
                 self.header = header.parse(self.read(0x200))
                 self.pages = TpsPagesList(self, self.header.page_root_ref, check=self.check)
                 self.__getdefinition()
-                self.set_current_table(current_tablename)
+                # TODO temp disable
+                #self.set_current_table(current_tablename)
             except adapters.ConstError:
                 print('Bad cryptographic keys.')
 
     def __getdefinition(self):
         for page_ref in reversed(self.pages.list()):
             if self.pages[page_ref].hierarchy_level == 0:
-                for record in TpsRecordsList(self, self.pages[page_ref], check=self.check):
+                for record in TpsRecordsList(self, self.pages[page_ref], encoding=self.encoding, check=self.check):
                     if record.type != 'NULL' and record.data.table_number not in self.tables.get_numbers():
                         self.tables.add(record.data.table_number)
                     if record.type == 'TABLE_NAME':
                         self.tables.set_name(record.data.table_number, record.data.table_name)
                     if record.type == 'TABLE_DEFINITION':
                         self.tables.add_definition(record.data.table_number, record.data.table_definition_bytes)
-                    if self.tables.iscomplete():
-                        break
-            if self.tables.iscomplete():
-                break
+                        # TODO temp disable
+                        #if self.tables.iscomplete():
+                        #    break
+                        #TODO temp disable
+                        #if self.tables.iscomplete():
+                        #    break
 
     def block_contains(self, start_ref, end_ref):
         for i in range(len(self.header.block_start_ref)):
@@ -128,8 +133,68 @@ class TPS:
         self.tps_file.seek(pos)
 
     def __iter__(self):
-        # TODO
-        pass
+        table_definition = self.tables.get_definition(self.current_table_number)
+        for page_ref in self.pages.list():
+            if self.pages[page_ref].hierarchy_level == 0:
+                for record in TpsRecordsList(self, self.pages[page_ref], encoding=self.encoding, check=self.check):
+                    if record.type == 'DATA' and record.data.table_number == self.current_table_number:
+                        check_value('table_record_size', len(record.data.data), table_definition.record_size)
+                        fields = {"b':RecNo'": record.data.record_number}
+                        for field in table_definition.record_table_definition_field:
+                            field_data = record.data.data[field.offset:field.offset + field.size]
+                            value = ''
+                            if field.type == 'BYTE':
+                                value = ULInt8('byte').parse(field_data)
+                            elif field.type == 'SHORT':
+                                value = SLInt16('short').parse(field_data)
+                            elif field.type == 'USHORT':
+                                value = ULInt16('ushort').parse(field_data)
+                            elif field.type == 'DATE':
+                                value = self.to_date(field_data)
+                            elif field.type == 'TIME':
+                                value = self.to_time(field_data)
+                            elif field.type == 'LONG':
+                                if field.name.decode(encoding='cp437').split(':')[1].lower() in self.date_fieldname:
+                                    if SLInt32('long').parse(field_data) == 0:
+                                        value = None
+                                    else:
+                                        value = date.fromordinal(657433 + SLInt32('long').parse(field_data))
+                                elif field.name.decode(encoding='cp437').split(':')[1].lower() in self.time_fieldname:
+                                    s, ms = divmod(SLInt32('long').parse(field_data), 100)
+                                    value = str('{}.{:03d}'.format(time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                                 time.gmtime(s)), ms))
+                                else:
+                                    value = SLInt32('long').parse(field_data)
+                            elif field.type == 'ULONG':
+                                value = ULInt32('ulong').parse(field_data)
+                            elif field.type == 'FLOAT':
+                                value = LFloat32('float').parse(field_data)
+                            elif field.type == 'DOUBLE':
+                                value = LFloat64('double').parse(field_data)
+                            elif field.type == 'DECIMAL':
+                                # TODO BCD
+                                if field_data[0] & 0xF0 == 0xF0:
+                                    sign = -1
+                                    field_data = bytearray(field_data)
+                                    field_data[0] &= 0x0F
+                                else:
+                                    sign = 1
+                                value = sign * int(hexlify(field_data)) / 10 ** field.decimal_count
+                            elif field.type == 'STRING':
+                                value = text_type(field_data, encoding=self.encoding).strip()
+                            elif field.type == 'CSTRING':
+                                value = text_type(field_data, encoding=self.encoding).strip()
+                            elif field.type == 'PSTRING':
+                                value = text_type(field_data[1:field_data[0] + 1], encoding=self.encoding).strip()
+                            else:
+                                # GROUP=0x16
+                                # raise ValueError
+                                #TODO
+                                pass
+
+                            fields[text_type(field.name)] = value
+                        # print(fields)
+                        yield fields
 
     def set_current_table(self, tablename):
         self.current_table_number = self.tables.get_number(tablename)
