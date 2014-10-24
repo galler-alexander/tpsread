@@ -3,6 +3,7 @@ Class to read TPS files
 
 http://www.clarionlife.net/content/view/41/29/
 http://www.softvelocity.com/clarion/pdf/languagereferencemanual.pdf
+http://www.softvelocity.com/clarion/pdf/databasedrivers.pdf
 """
 
 import os.path
@@ -21,6 +22,7 @@ from .tpstable import TpsTablesList
 from .tpspage import TpsPagesList
 from .tpsrecord import TpsRecordsList
 from .utils import check_value
+
 
 
 
@@ -139,6 +141,7 @@ class TPS:
                 for record in TpsRecordsList(self, self.pages[page_ref], encoding=self.encoding, check=self.check):
                     if record.type == 'DATA' and record.data.table_number == self.current_table_number:
                         check_value('table_record_size', len(record.data.data), table_definition.record_size)
+                        # TODO convert name to string
                         fields = {"b':RecNo'": record.data.record_number}
                         for field in table_definition.record_table_definition_field:
                             field_data = record.data.data[field.offset:field.offset + field.size]
@@ -154,6 +157,7 @@ class TPS:
                             elif field.type == 'TIME':
                                 value = self.to_time(field_data)
                             elif field.type == 'LONG':
+                                #TODO
                                 if field.name.decode(encoding='cp437').split(':')[1].lower() in self.date_fieldname:
                                     if SLInt32('long').parse(field_data) == 0:
                                         value = None
