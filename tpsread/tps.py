@@ -26,6 +26,7 @@ from .utils import check_value
 
 
 
+
 # Date structure
 DATE_STRUCT = Struct('date_struct',
                      Byte('day'),
@@ -216,7 +217,7 @@ class TPS:
 
         # metadata
         # ?header
-        # tables
+        # tables (+ record count from metadata)
         # fields
         # longname fields
         #indexes (and key)
