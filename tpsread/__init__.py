@@ -20,4 +20,4 @@ from .tps import TPS
 from .tpscrypt import TpsDecryptor
 
 # list of public objects
-__all_ = []
+__all__ = []

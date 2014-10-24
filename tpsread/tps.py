@@ -22,15 +22,14 @@ from .tpsrecord import TpsRecordsList
 
 
 
-
 # Date structure
-date_struct = Struct('date_struct',
+DATE_STRUCT = Struct('date_struct',
                      Byte('day'),
                      Byte('month'),
                      ULInt16('year'), )
 
 # Time structure
-time_struct = Struct('time_struct',
+TIME_STRUCT = Struct('time_struct',
                      Byte('centisecond'),
                      Byte('second'),
                      Byte('minute'),
@@ -42,8 +41,9 @@ class TPS:
     TPS file
     """
 
-    def __init__(self, filename, encoding=None, password=None, check=False, current_tablename=None, date_fieldname=[],
-                 time_fieldname=[], decryptor_class=TpsDecryptor):
+    def __init__(self, filename, encoding=None, password=None, check=False,
+                 current_tablename=None, date_fieldname=None,
+                 time_fieldname=None, decryptor_class=TpsDecryptor):
         self.filename = filename
         self.encoding = encoding
         self.password = password
@@ -88,8 +88,8 @@ class TPS:
 
                 self.header = header.parse(self.read(0x200))
                 self.pages = TpsPagesList(self, self.header.page_root_ref, check=self.check)
-                # self.__getdefinition()
-                # self.set_current_table(current_tablename)
+                self.__getdefinition()
+                self.set_current_table(current_tablename)
             except adapters.ConstError:
                 print('Bad cryptographic keys.')
 
@@ -134,15 +134,15 @@ class TPS:
     def set_current_table(self, tablename):
         self.current_table_number = self.tables.get_number(tablename)
 
-    def to_date(value):
-        value_date = date_struct.parse(value)
+    def to_date(self, value):
+        value_date = DATE_STRUCT.parse(value)
         if value_date.year == 0:
             return None
         else:
             return date(value_date.year, value_date.month, value_date.day)
 
-    def to_time(value):
-        value_time = time_struct.parse(value)
+    def to_time(self, value):
+        value_time = TIME_STRUCT.parse(value)
         return time(value_time.hour, value_time.minute, value_time.second, value_time.centisecond * 10000)
 
         # metadata

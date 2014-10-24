@@ -10,7 +10,7 @@ from .utils import check_value
 
 
 # Page header
-page_header_struct = Struct('page',
+PAGE_HEADER_STRUCT = Struct('page',
                             ULInt32('offset'),
                             # size - total size with header
                             ULInt16('size'),
@@ -30,11 +30,11 @@ class TpsPage:
         self.__page_child_ref = []
 
         self.tps.seek(ref * 0x100 + self.tps.header.size)
-        page = page_header_struct.parse(self.tps.read(page_header_struct.sizeof()))
+        page = PAGE_HEADER_STRUCT.parse(self.tps.read(PAGE_HEADER_STRUCT.sizeof()))
 
         if page.hierarchy_level != 0:
             page.data = Array(lambda ctx: page.record_count, ULInt32('page_child_ref')).parse(
-                self.tps.read(page.size - page_header_struct.sizeof()))
+                self.tps.read(page.size - PAGE_HEADER_STRUCT.sizeof()))
 
         self.offset = page.offset
         self.size = page.size
@@ -85,7 +85,7 @@ class TpsPagesList:
 
         if self.check:
             intersection_page = self.__intersection(ref, page.size)
-            if not intersection_page is None:
+            if intersection_page is not None:
                 warn('Page ref# {page_ref1} intersects with the page ref# {page_ref2}'
                      .format(page_ref1=ref, page_ref2=intersection_page.ref))
 
