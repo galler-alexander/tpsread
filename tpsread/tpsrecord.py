@@ -80,7 +80,7 @@ class TpsRecordsList:
         self.__records = []
 
         if self.tps_page.hierarchy_level == 0:
-            if self.tps_page.ref in tps.cache_pages:
+            if self.tps_page.ref in self.tps.cache_pages:
                 self = tps.cache_pages[self.tps_page.ref]
             else:
                 data = self.tps.read(self.tps_page.size - PAGE_HEADER_STRUCT.sizeof(),
