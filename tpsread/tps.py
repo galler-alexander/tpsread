@@ -25,8 +25,6 @@ from .utils import check_value
 
 
 
-
-
 # Date structure
 DATE_STRUCT = Struct('date_struct',
                      Byte('day'),
@@ -46,12 +44,13 @@ class TPS:
     TPS file
     """
 
-    def __init__(self, filename, encoding=None, password=None, check=False,
+    def __init__(self, filename, encoding=None, password=None, cached=True, check=False,
                  current_tablename=None, date_fieldname=None,
                  time_fieldname=None, decryptor_class=TpsDecryptor):
         self.filename = filename
         self.encoding = encoding
         self.password = password
+        self.cached = cached
         self.check = check
         self.current_table_number = None
         # Name part before .tps
@@ -60,6 +59,7 @@ class TPS:
         self.date_fieldname = date_fieldname
         self.time_fieldname = time_fieldname
         self.tables = TpsTablesList()
+        self.cache_pages = {}
 
         if not os.path.isfile(self.filename):
             raise FileNotFoundError(self.filename)

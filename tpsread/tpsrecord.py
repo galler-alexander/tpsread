@@ -80,35 +80,42 @@ class TpsRecordsList:
         self.__records = []
 
         if self.tps_page.hierarchy_level == 0:
-            data = self.tps.read(self.tps_page.size - PAGE_HEADER_STRUCT.sizeof(),
-                                 self.tps_page.ref * 0x100 + self.tps.header.size + PAGE_HEADER_STRUCT.sizeof())
+            if self.tps_page.ref in tps.cache_pages:
+                self = tps.cache_pages[self.tps_page.ref]
+            else:
+                data = self.tps.read(self.tps_page.size - PAGE_HEADER_STRUCT.sizeof(),
+                                     self.tps_page.ref * 0x100 + self.tps.header.size + PAGE_HEADER_STRUCT.sizeof())
 
-            if self.tps_page.uncompressed_size > self.tps_page.size:
-                data = self.__uncompress(data)
+                if self.tps_page.uncompressed_size > self.tps_page.size:
+                    data = self.__uncompress(data)
 
-                if self.check:
-                    check_value('record_data.size', len(data) + PAGE_HEADER_STRUCT.sizeof(), tps_page.uncompressed_size)
+                    if self.check:
+                        check_value('record_data.size', len(data) + PAGE_HEADER_STRUCT.sizeof(),
+                                    tps_page.uncompressed_size)
 
-            record_data = b''
-            pos = 0
-            record_size = 0
-            record_header_size = 0
+                record_data = b''
+                pos = 0
+                record_size = 0
+                record_header_size = 0
 
-            while pos < len(data):
-                byte_counter = data[pos]
-                pos += 1
-                if (byte_counter & 0x80) == 0x80:
-                    record_size = data[pos + 1] * 0x100 + data[pos]
-                    pos += 2
-                if (byte_counter & 0x40) == 0x40:
-                    record_header_size = data[pos + 1] * 0x100 + data[pos]
-                    pos += 2
-                byte_counter &= 0x3F
-                new_data_size = record_size - byte_counter
-                record_data = record_data[:byte_counter] + data[pos:pos + new_data_size]
-                self.__records.append(TpsRecord(record_header_size, ULInt16('data_size').build(record_size)
-                                                + record_data))
-                pos += new_data_size
+                while pos < len(data):
+                    byte_counter = data[pos]
+                    pos += 1
+                    if (byte_counter & 0x80) == 0x80:
+                        record_size = data[pos + 1] * 0x100 + data[pos]
+                        pos += 2
+                    if (byte_counter & 0x40) == 0x40:
+                        record_header_size = data[pos + 1] * 0x100 + data[pos]
+                        pos += 2
+                    byte_counter &= 0x3F
+                    new_data_size = record_size - byte_counter
+                    record_data = record_data[:byte_counter] + data[pos:pos + new_data_size]
+                    self.__records.append(TpsRecord(record_header_size, ULInt16('data_size').build(record_size)
+                                                    + record_data))
+                    pos += new_data_size
+
+                if self.tps.cached and self.tps_page.ref not in tps.cache_pages:
+                    tps.cache_pages[self.tps_page.ref] = self
 
     def __uncompress(self, data):
         pos = 0
