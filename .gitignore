@@ -55,3 +55,6 @@ target/
 
 # PyCharm
 .idea/
+
+# Mac OS
+.DS_Store
