@@ -81,7 +81,7 @@ class TpsRecordsList:
 
         if self.tps_page.hierarchy_level == 0:
             if self.tps_page.ref in self.tps.cache_pages:
-                self = tps.cache_pages[self.tps_page.ref]
+                self.__records = tps.cache_pages[self.tps_page.ref]
             else:
                 data = self.tps.read(self.tps_page.size - PAGE_HEADER_STRUCT.sizeof(),
                                      self.tps_page.ref * 0x100 + self.tps.header.size + PAGE_HEADER_STRUCT.sizeof())
@@ -115,7 +115,7 @@ class TpsRecordsList:
                     pos += new_data_size
 
                 if self.tps.cached and self.tps_page.ref not in tps.cache_pages:
-                    tps.cache_pages[self.tps_page.ref] = self
+                    tps.cache_pages[self.tps_page.ref] = self.__records
 
     def __uncompress(self, data):
         pos = 0

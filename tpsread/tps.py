@@ -25,6 +25,7 @@ from .utils import check_value
 
 
 
+
 # Date structure
 DATE_STRUCT = Struct('date_struct',
                      Byte('day'),
@@ -56,9 +57,14 @@ class TPS:
         # Name part before .tps
         self.name = os.path.basename(filename)
         self.name = text_type(os.path.splitext(self.name)[0]).lower()
-        self.date_fieldname = date_fieldname
-        self.time_fieldname = time_fieldname
-        self.tables = TpsTablesList()
+        if date_fieldname is not None:
+            self.date_fieldname = date_fieldname
+        else:
+            self.date_fieldname = []
+        if time_fieldname is not None:
+            self.time_fieldname = time_fieldname
+        else:
+            self.time_fieldname = []
         self.cache_pages = {}
 
         if not os.path.isfile(self.filename):
@@ -93,28 +99,10 @@ class TPS:
 
                 self.header = header.parse(self.read(0x200))
                 self.pages = TpsPagesList(self, self.header.page_root_ref, check=self.check)
-                self.__getdefinition()
-                # TODO temp disable
-                #self.set_current_table(current_tablename)
+                self.tables = TpsTablesList(self, encoding=self.encoding, check=self.check)
+                self.set_current_table(current_tablename)
             except adapters.ConstError:
                 print('Bad cryptographic keys.')
-
-    def __getdefinition(self):
-        for page_ref in reversed(self.pages.list()):
-            if self.pages[page_ref].hierarchy_level == 0:
-                for record in TpsRecordsList(self, self.pages[page_ref], encoding=self.encoding, check=self.check):
-                    if record.type != 'NULL' and record.data.table_number not in self.tables.get_numbers():
-                        self.tables.add(record.data.table_number)
-                    if record.type == 'TABLE_NAME':
-                        self.tables.set_name(record.data.table_number, record.data.table_name)
-                    if record.type == 'TABLE_DEFINITION':
-                        self.tables.add_definition(record.data.table_number, record.data.table_definition_bytes)
-                        # TODO temp disable
-                        #if self.tables.iscomplete():
-                        #    break
-                        #TODO temp disable
-                        #if self.tables.iscomplete():
-                        #    break
 
     def block_contains(self, start_ref, end_ref):
         for i in range(len(self.header.block_start_ref)):

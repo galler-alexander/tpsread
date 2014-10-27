@@ -4,6 +4,8 @@ TPS File Table
 
 from construct import Array, BitField, BitStruct, Byte, Const, CString, Embed, Enum, Flag, If, Padding, Struct, ULInt16
 
+from .tpsrecord import TpsRecordsList
+
 
 FIELD_TYPE_STRUCT = Enum(Byte('type'),
                          BYTE=0x1,
@@ -114,6 +116,7 @@ class TpsTable:
         self.name = ''
         self.definition_bytes = {}
         self.definition = ''
+        self.statistics = {}
 
     @property
     def iscomplete(self):
@@ -128,27 +131,56 @@ class TpsTable:
         portion_number = ULInt16('portion_number').parse(definition[:2])
         self.definition_bytes[portion_number] = definition[2:]
 
+    def add_statistics(self, statistics_struct):
+        # TODO remove metadatatype from staticstics_struct
+        self.statistics[statistics_struct.metadata_type] = statistics_struct
+
+    def get_definition(self):
+        definition_bytes = b''
+        for value in self.definition_bytes.values():
+            definition_bytes += value
+        self.definition = TABLE_DEFINITION_STRUCT.parse(definition_bytes)
+        return self.definition
+
     def set_name(self, name):
         self.name = name
 
 
 class TpsTablesList:
-    def __init__(self):
+    def __init__(self, tps, encoding=None, check=False):
+        self.__tps = tps
+        self.encoding = encoding
+        self.check = check
         self.__tables = {}
 
-    def add(self, number):
-        self[number] = TpsTable(number)
+        # get tables definition
+        i = 0
+        d = None
+        s = None
+        for page_ref in reversed(self.__tps.pages.list()):
+            if self.__tps.pages[page_ref].hierarchy_level == 0:
+                for record in TpsRecordsList(self.__tps, self.__tps.pages[page_ref],
+                                             encoding=self.encoding, check=self.check):
+                    i += 1
+                    if record.type != 'NULL' and record.data.table_number not in self.__tables.keys():
+                        self.__tables[record.data.table_number] = TpsTable(record.data.table_number)
+                    if record.type == 'TABLE_NAME':
+                        self.__tables[record.data.table_number].set_name(record.data.table_name.decode(self.encoding))
+                    if record.type == 'TABLE_DEFINITION':
+                        self.__tables[record.data.table_number].add_definition(record.data.table_definition_bytes)
+                        #d = i
+                    if record.type == 'METADATA':
+                        self.__tables[record.data.table_number].add_statistics(record.data)
+                        #s = i
+                    #TODO optimize (table_definition and metadata(statistics))
+                    if self.__iscomplete():
+                        break
+                if self.__iscomplete():
+                    break
+                    #print('stats:', i, d, s, len(self.__tps.pages.list()))
+                    #TODO raise exception: No definition found
 
-    def set_name(self, number, name):
-        self[number].set_name(name)
-
-    def add_definition(self, number, definition):
-        self[number].add_definition(definition)
-
-    def get_numbers(self):
-        return self.__tables.keys()
-
-    def iscomplete(self):
+    def __iscomplete(self):
         for i in self.__tables:
             if not self.__tables[i].iscomplete:
                 return False
@@ -157,8 +189,10 @@ class TpsTablesList:
         else:
             return True
 
-    def __getitem__(self, key):
-        return self.__tables[key]
+    def get_definition(self, number):
+        return self.__tables[number].get_definition()
 
-    def __setitem__(self, key, item):
-        self.__tables[key] = item
+    def get_number(self, name):
+        for i in self.__tables:
+            if self.__tables[i].name == name:
+                return i
